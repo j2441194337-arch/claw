@@ -1,0 +1,67 @@
+{
+  "providers": {
+    "openai": {
+      "label": "OpenAI",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeysEnv": "OPENAI_API_KEYS",
+      "chatPath": "/chat/completions",
+      "embeddingsPath": "/embeddings",
+      "headers": {
+        "Authorization": "Bearer {{apiKey}}"
+      }
+    },
+    "anthropic": {
+      "label": "Anthropic via OpenAI-compatible gateway",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "apiKeysEnv": "ANTHROPIC_API_KEYS",
+      "chatPath": "/messages",
+      "embeddingsPath": "/embeddings",
+      "headers": {
+        "x-api-key": "{{apiKey}}",
+        "anthropic-version": "2023-06-01"
+      }
+    },
+    "google": {
+      "label": "Google Gemini OpenAI-compatible endpoint",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "apiKeysEnv": "GOOGLE_API_KEYS",
+      "chatPath": "/chat/completions",
+      "embeddingsPath": "/embeddings",
+      "headers": {
+        "Authorization": "Bearer {{apiKey}}"
+      }
+    },
+    "domestic": {
+      "label": "Domestic compatible provider",
+      "baseUrl": "https://api.siliconflow.cn/v1",
+      "apiKeysEnv": "DOMESTIC_API_KEYS",
+      "chatPath": "/chat/completions",
+      "embeddingsPath": "/embeddings",
+      "headers": {
+        "Authorization": "Bearer {{apiKey}}"
+      }
+    }
+  },
+  "routing": {
+    "defaultProvider": "openai",
+    "modelMap": {
+      "gpt-4.1-mini": "openai",
+      "gpt-4o-mini": "openai",
+      "claude-sonnet": "anthropic",
+      "gemini-2.5-flash": "google",
+      "deepseek-chat": "domestic"
+    }
+  },
+  "pricing": {
+    "chat": {
+      "base": 0.02,
+      "unit": "request"
+    },
+    "embeddings": {
+      "base": 0.01,
+      "unit": "request"
+    },
+    "markupRate": 1.35,
+    "monthlySubscription": 99
+  }
+}

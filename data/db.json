@@ -1,0 +1,45 @@
+{
+  "users": [
+    {
+      "id": "u_admin_demo",
+      "name": "demo-admin",
+      "apiKey": "proxy_demo_admin_key",
+      "balance": 500,
+      "plan": "pro",
+      "monthlyQuota": 5000,
+      "usedThisMonth": 0,
+      "isActive": true,
+      "createdAt": "2026-05-09T00:00:00.000Z"
+    },
+    {
+      "id": "u_basic_demo",
+      "name": "demo-basic",
+      "apiKey": "proxy_demo_basic_key",
+      "balance": 100,
+      "plan": "basic",
+      "monthlyQuota": 1000,
+      "usedThisMonth": 0,
+      "isActive": true,
+      "createdAt": "2026-05-09T00:00:00.000Z"
+    }
+  ],
+  "providerState": {
+    "openai": { "cursor": 0 },
+    "anthropic": { "cursor": 0 },
+    "google": { "cursor": 0 },
+    "domestic": { "cursor": 0 }
+  },
+  "usage": [],
+  "subscriptions": [
+    {
+      "plan": "basic",
+      "monthlyPrice": 29,
+      "description": "低门槛订阅，适合轻量个人用户"
+    },
+    {
+      "plan": "pro",
+      "monthlyPrice": 99,
+      "description": "基础盈利主力档，适合团队和中频调用"
+    }
+  ]
+}
