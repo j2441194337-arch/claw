@@ -1,4 +1,4 @@
-import { config } from '../utils/env.js';
+import { config, env } from '../utils/env.js';
 import { loadDb, saveDb } from './db.js';
 
 function getKeysFromEnv(envName) {
@@ -9,10 +9,27 @@ function getKeysFromEnv(envName) {
 }
 
 export function resolveProviderByModel(model) {
-  return config?.routing?.modelMap?.[model] || config?.routing?.defaultProvider || 'openai';
+  if (env.provider === 'third_party') {
+    return 'third_party';
+  }
+  return config?.routing?.modelMap?.[model] || env.provider || config?.routing?.defaultProvider || 'openai';
 }
 
 export function getProviderConfig(providerName) {
+  if (providerName === 'third_party') {
+    return {
+      label: 'Third-party OpenAI-compatible provider',
+      baseUrl: env.thirdPartyApiBaseUrl,
+      apiKeysEnv: env.thirdPartyApiKeysEnv,
+      chatPath: '/chat/completions',
+      embeddingsPath: '/embeddings',
+      modelsPath: '/models',
+      headers: {
+        Authorization: 'Bearer {{apiKey}}'
+      }
+    };
+  }
+
   const provider = config?.providers?.[providerName];
   if (!provider) {
     throw new Error(`Unsupported provider: ${providerName}`);
@@ -34,14 +51,23 @@ export function getRotatedKey(providerName) {
   return selectedKey;
 }
 
-export function buildProviderRequest(providerName, endpointType, payload) {
+export function buildProviderHeaders(providerName) {
   const provider = getProviderConfig(providerName);
   const apiKey = getRotatedKey(providerName);
-  const path = endpointType === 'embeddings' ? provider.embeddingsPath : provider.chatPath;
   const headers = { 'Content-Type': 'application/json' };
   for (const [key, value] of Object.entries(provider.headers || {})) {
     headers[key] = value.replace('{{apiKey}}', apiKey);
   }
+  return headers;
+}
+
+export function buildProviderRequest(providerName, endpointType, payload) {
+  const provider = getProviderConfig(providerName);
+  if (!provider.baseUrl) {
+    throw new Error(`Missing base URL for provider: ${providerName}`);
+  }
+  const path = endpointType === 'embeddings' ? provider.embeddingsPath : provider.chatPath;
+  const headers = buildProviderHeaders(providerName);
   return {
     url: `${provider.baseUrl}${path}`,
     options: {
@@ -50,4 +76,29 @@ export function buildProviderRequest(providerName, endpointType, payload) {
       body: JSON.stringify(payload)
     }
   };
+}
+
+export async function fetchThirdPartyModels() {
+  const provider = getProviderConfig('third_party');
+  if (!provider.baseUrl) {
+    throw new Error('Missing base URL for provider: third_party');
+  }
+  const headers = buildProviderHeaders('third_party');
+  const response = await fetch(`${provider.baseUrl}${provider.modelsPath || '/models'}`, {
+    method: 'GET',
+    headers
+  });
+  const rawText = await response.text();
+  let responseBody;
+  try {
+    responseBody = JSON.parse(rawText);
+  } catch {
+    responseBody = { raw: rawText };
+  }
+
+  if (!response.ok) {
+    throw new Error(`Third-party models fetch failed: ${response.status}`);
+  }
+
+  return responseBody;
 }

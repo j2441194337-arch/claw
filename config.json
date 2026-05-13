@@ -40,6 +40,16 @@
       "headers": {
         "Authorization": "Bearer {{apiKey}}"
       }
+    },
+    "third_party": {
+      "label": "Third-party OpenAI-compatible provider",
+      "baseUrl": "",
+      "apiKeysEnv": "THIRD_PARTY_API_KEYS",
+      "chatPath": "/chat/completions",
+      "embeddingsPath": "/embeddings",
+      "headers": {
+        "Authorization": "Bearer {{apiKey}}"
+      }
     }
   },
   "routing": {
