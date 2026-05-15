@@ -1,22 +1,16 @@
-import { getUserByApiKey, requirePositiveBalance } from '../services/users.js';
+import { env } from '../utils/env.js';
 
 export function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization || '';
-  const apiKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-api-key'];
+  const apiKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
   if (!apiKey) {
-    return res.status(401).json({ error: { message: 'Missing API key' } });
+    return res.status(401).json({ error: { message: 'Missing API key', code: 'missing_api_key' } });
   }
 
-  const user = getUserByApiKey(apiKey);
-  if (!user) {
-    return res.status(401).json({ error: { message: 'Invalid API key' } });
+  if (!env.apiKeys.includes(apiKey)) {
+    return res.status(401).json({ error: { message: 'Invalid API key', code: 'invalid_api_key' } });
   }
 
-  if (!requirePositiveBalance(user)) {
-    return res.status(402).json({ error: { message: 'Insufficient balance' } });
-  }
-
-  req.user = user;
   next();
 }
