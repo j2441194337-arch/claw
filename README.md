@@ -61,7 +61,9 @@ The implementation also tracks `updated_at`, `retry_count`, and `manual_interven
 - `status`
 - `expires_at`
 
-The current MVP stores these records in process memory so it is deployable without extra services. Production should move them to an encrypted database before real sales.
+Production stores these records in Postgres through `DATABASE_URL`. Supabase Postgres is the recommended first database because it works well with Vercel and does not depend on local filesystem persistence.
+
+For local development and automated tests, the app can fall back to an in-memory store when `DATABASE_URL` is not set. In production, configure `DATABASE_URL` before accepting real orders.
 
 ## Website Routes
 
@@ -87,6 +89,8 @@ Set these in Vercel Environment Variables:
 ```bash
 NODE_ENV=production
 PORT=3000
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/postgres
+DATABASE_SSL=true
 DELIVERY_ENCRYPTION_KEY=replace-with-long-random-secret
 ADMIN_TOKEN=replace-with-admin-token
 THIRD_PARTY_ACCOUNT=
@@ -95,10 +99,32 @@ THIRD_PARTY_PASSWORD=
 
 Notes:
 
+- `DATABASE_URL` is the Supabase/Postgres connection string used for persistent orders, purchases, and delivery codes.
+- `DATABASE_SSL=true` is recommended for Supabase and most hosted Postgres providers.
 - `DELIVERY_ENCRYPTION_KEY` protects encrypted third-party connection payloads.
 - `ADMIN_TOKEN` is required for the admin page in production. Use `?token=...` or `X-Admin-Token`.
 - `THIRD_PARTY_ACCOUNT` and `THIRD_PARTY_PASSWORD` are placeholders for Stage 2 integrations and must stay in environment variables only.
 - Do not write real credentials, raw connection codes, API keys, cookies, or tokens into GitHub.
+
+## Database Setup
+
+Recommended option: Supabase Postgres.
+
+1. Create a Supabase project.
+2. Open Project Settings, then Database.
+3. Copy the pooled or direct Postgres connection string.
+4. Add it to Vercel as `DATABASE_URL`.
+5. Set `DATABASE_SSL=true`.
+6. Set a long random `DELIVERY_ENCRYPTION_KEY`.
+
+The app automatically creates these tables on first use:
+
+- `plans`
+- `orders`
+- `third_party_purchases`
+- `delivery_codes`
+
+It also seeds the default storefront plans idempotently. Editing plan configuration can later be moved to an admin CRUD page; for now the seed lives in `src/services/store.js`.
 
 ## Local Development
 
@@ -115,6 +141,8 @@ Then visit:
 - `http://localhost:3000/admin`
 
 In non-production mode, the admin page is open when `ADMIN_TOKEN` is not set. In production, set `ADMIN_TOKEN`.
+
+Without `DATABASE_URL`, local development and tests use `memory-fallback` storage. `/api/status` reports the active `storageMode`.
 
 ## Stage 1 Fulfillment Flow
 
@@ -140,6 +168,27 @@ Recommended Vercel settings:
 - Output Directory: leave empty
 
 The project uses `vercel.json` to route requests to `src/server.js` through `@vercel/node`.
+
+Vercel settings:
+
+- Root Directory: `./`
+- Framework Preset: `Other`
+- Install Command: `npm install`
+- Build Command: leave empty
+- Output Directory: leave empty
+
+Required production environment variables:
+
+- `NODE_ENV=production`
+- `DATABASE_URL`
+- `DATABASE_SSL=true`
+- `DELIVERY_ENCRYPTION_KEY`
+- `ADMIN_TOKEN`
+
+Optional Stage 2 environment variables:
+
+- `THIRD_PARTY_ACCOUNT`
+- `THIRD_PARTY_PASSWORD`
 
 ## Security
 

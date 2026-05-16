@@ -20,8 +20,8 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${address.port}`;
 });
 
-beforeEach(() => {
-  resetStoreForTests();
+beforeEach(async () => {
+  await resetStoreForTests();
 });
 
 after(async () => {
@@ -73,9 +73,9 @@ test('order payment creates mapped purchase and delivery code without raw exposu
   });
   assert.equal(payResponse.status, 303);
 
-  const orders = listOrders();
-  const purchases = listPurchases();
-  const deliveries = listDeliveryCodes();
+  const orders = await listOrders();
+  const purchases = await listPurchases();
+  const deliveries = await listDeliveryCodes();
 
   assert.equal(orders.length, 1);
   assert.equal(orders[0].pay_status, 'paid');

@@ -200,8 +200,8 @@ function planCard(plan) {
   </article>`;
 }
 
-function orderSummary(order) {
-  const plan = getPlan(order.plan_id);
+async function orderSummary(order) {
+  const plan = await getPlan(order.plan_id);
   return `<div class="panel">
     <h2>Order ${h(order.id)}</h2>
     <p>Contact: <code>${h(order.user_contact)}</code></p>
@@ -253,62 +253,79 @@ router.get('/', (req, res) => {
   `));
 });
 
-router.get('/plans', (req, res) => {
-  res.type('html').send(page('Plans', `
-    <h1>Plans</h1>
-    <p class="lead">Choose the package the user buys from our platform. The backend maps it to a supplier purchase plan.</p>
-    <section class="grid">${listPlans().map(planCard).join('')}</section>
-  `));
+router.get('/plans', async (req, res, next) => {
+  try {
+    const plans = await listPlans();
+    res.type('html').send(page('Plans', `
+      <h1>Plans</h1>
+      <p class="lead">Choose the package the user buys from our platform. The backend maps it to a supplier purchase plan.</p>
+      <section class="grid">${plans.map(planCard).join('')}</section>
+    `));
+  } catch (error) {
+    next(error);
+  }
 });
 
-router.get('/plans/:planId', (req, res) => {
-  const plan = getPlan(req.params.planId);
-  if (!plan) {
-    return res.status(404).type('html').send(page('Plan Not Found', '<h1>Plan not found</h1>'));
+router.get('/plans/:planId', async (req, res, next) => {
+  try {
+    const plan = await getPlan(req.params.planId);
+    if (!plan) {
+      return res.status(404).type('html').send(page('Plan Not Found', '<h1>Plan not found</h1>'));
+    }
+    res.type('html').send(page(plan.name, `
+      <h1>${h(plan.name)}</h1>
+      <p class="lead">${h(plan.description)}</p>
+      <div class="panel">
+        <p class="price">$${h(plan.price)}</p>
+        <p>Storefront code: <code>${h(plan.our_plan_code)}</code></p>
+        <p>Supplier mapping: <code>${h(plan.third_party_plan_code)}</code></p>
+        <a class="button" href="/checkout/${h(plan.id)}">Start order</a>
+      </div>
+    `));
+  } catch (error) {
+    next(error);
   }
-  res.type('html').send(page(plan.name, `
-    <h1>${h(plan.name)}</h1>
-    <p class="lead">${h(plan.description)}</p>
-    <div class="panel">
-      <p class="price">$${h(plan.price)}</p>
-      <p>Storefront code: <code>${h(plan.our_plan_code)}</code></p>
-      <p>Supplier mapping: <code>${h(plan.third_party_plan_code)}</code></p>
-      <a class="button" href="/checkout/${h(plan.id)}">Start order</a>
-    </div>
-  `));
 });
 
-router.get('/checkout/:planId', (req, res) => {
-  const plan = getPlan(req.params.planId);
-  if (!plan) {
-    return res.status(404).type('html').send(page('Plan Not Found', '<h1>Plan not found</h1>'));
+router.get('/checkout/:planId', async (req, res, next) => {
+  try {
+    const plan = await getPlan(req.params.planId);
+    if (!plan) {
+      return res.status(404).type('html').send(page('Plan Not Found', '<h1>Plan not found</h1>'));
+    }
+    res.type('html').send(page('Checkout', `
+      <h1>Checkout</h1>
+      <div class="panel">
+        <h2>${h(plan.name)}</h2>
+        <p class="price">$${h(plan.price)}</p>
+        <form method="post" action="/orders">
+          <input type="hidden" name="plan_id" value="${h(plan.id)}" />
+          <label>User contact
+            <input name="user_contact" required placeholder="email@example.com or Telegram handle" />
+          </label>
+          <p><button type="submit">Create order</button></p>
+        </form>
+      </div>
+    `));
+  } catch (error) {
+    next(error);
   }
-  res.type('html').send(page('Checkout', `
-    <h1>Checkout</h1>
-    <div class="panel">
-      <h2>${h(plan.name)}</h2>
-      <p class="price">$${h(plan.price)}</p>
-      <form method="post" action="/orders">
-        <input type="hidden" name="plan_id" value="${h(plan.id)}" />
-        <label>User contact
-          <input name="user_contact" required placeholder="email@example.com or Telegram handle" />
-        </label>
-        <p><button type="submit">Create order</button></p>
-      </form>
-    </div>
-  `));
 });
 
-router.post('/orders', (req, res) => {
-  const userContact = String(req.body.user_contact || '').trim();
-  if (!userContact || !req.body.plan_id) {
-    return res.status(400).type('html').send(page('Invalid Order', '<h1>Missing order contact or plan</h1>'));
+router.post('/orders', async (req, res, next) => {
+  try {
+    const userContact = String(req.body.user_contact || '').trim();
+    if (!userContact || !req.body.plan_id) {
+      return res.status(400).type('html').send(page('Invalid Order', '<h1>Missing order contact or plan</h1>'));
+    }
+    const order = await createOrder({
+      planId: req.body.plan_id,
+      userContact
+    });
+    res.redirect(303, `/orders/${order.id}`);
+  } catch (error) {
+    next(error);
   }
-  const order = createOrder({
-    planId: req.body.plan_id,
-    userContact
-  });
-  res.redirect(303, `/orders/${order.id}`);
 });
 
 router.get('/orders', (req, res) => {
@@ -325,69 +342,90 @@ router.get('/orders', (req, res) => {
   `));
 });
 
-router.get('/orders/find', (req, res) => {
-  const query = String(req.query.q || '').trim();
-  const delivery = getDeliveryByPublicCode(query);
-  if (delivery) {
-    return res.redirect(303, `/orders/${delivery.order_id}`);
-  }
-  const order = getOrder(query);
-  if (order) {
-    return res.redirect(303, `/orders/${order.id}`);
-  }
-  return res.status(404).type('html').send(page('Order Not Found', '<h1>Order not found</h1>'));
-});
-
-router.get('/orders/:orderId', (req, res) => {
-  const order = getOrder(req.params.orderId);
-  if (!order) {
+router.get('/orders/find', async (req, res, next) => {
+  try {
+    const query = String(req.query.q || '').trim();
+    const delivery = await getDeliveryByPublicCode(query);
+    if (delivery) {
+      return res.redirect(303, `/orders/${delivery.order_id}`);
+    }
+    const order = await getOrder(query);
+    if (order) {
+      return res.redirect(303, `/orders/${order.id}`);
+    }
     return res.status(404).type('html').send(page('Order Not Found', '<h1>Order not found</h1>'));
+  } catch (error) {
+    next(error);
   }
-  res.type('html').send(page('Order Status', `
-    <h1>Order Status</h1>
-    ${orderSummary(order)}
-    ${order.pay_status === 'pending' ? `
-      <form method="post" action="/orders/${h(order.id)}/pay">
-        <p><button type="submit">Simulate payment success</button></p>
-      </form>
-    ` : ''}
-    ${order.delivery_code ? `<p><a class="button" href="/delivery/${h(order.delivery_code)}">Open delivery page</a></p>` : ''}
-  `));
 });
 
-router.post('/orders/:orderId/pay', (req, res) => {
-  markOrderPaid(req.params.orderId);
-  res.redirect(303, `/orders/${req.params.orderId}`);
-});
-
-router.get('/delivery/:publicCode', (req, res) => {
-  const delivery = getDeliveryByPublicCode(req.params.publicCode);
-  if (!delivery) {
-    return res.status(404).type('html').send(page('Delivery Not Found', '<h1>Delivery code not found</h1>'));
+router.get('/orders/:orderId', async (req, res, next) => {
+  try {
+    const order = await getOrder(req.params.orderId);
+    if (!order) {
+      return res.status(404).type('html').send(page('Order Not Found', '<h1>Order not found</h1>'));
+    }
+    res.type('html').send(page('Order Status', `
+      <h1>Order Status</h1>
+      ${await orderSummary(order)}
+      ${order.pay_status === 'pending' ? `
+        <form method="post" action="/orders/${h(order.id)}/pay">
+          <p><button type="submit">Simulate payment success</button></p>
+        </form>
+      ` : ''}
+      ${order.delivery_code ? `<p><a class="button" href="/delivery/${h(order.delivery_code)}">Open delivery page</a></p>` : ''}
+    `));
+  } catch (error) {
+    next(error);
   }
-  const order = getOrder(delivery.order_id);
-  res.type('html').send(page('Delivery', `
-    <h1>Delivery Code</h1>
-    <div class="panel">
-      <p>Your delivery code:</p>
-      <p class="price"><code>${h(delivery.public_code)}</code></p>
-      <p>Status: <span class="status">${h(delivery.status)}</span></p>
-      <p>Order: <code>${h(order.id)}</code></p>
-      <p class="muted">The third-party raw connection code is encrypted in storage and is not displayed on this page.</p>
-    </div>
-  `));
 });
 
-router.get('/admin', (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const purchases = listPurchases();
-  res.type('html').send(page('Admin', `
+router.post('/orders/:orderId/pay', async (req, res, next) => {
+  try {
+    await markOrderPaid(req.params.orderId);
+    res.redirect(303, `/orders/${req.params.orderId}`);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/delivery/:publicCode', async (req, res, next) => {
+  try {
+    const delivery = await getDeliveryByPublicCode(req.params.publicCode);
+    if (!delivery) {
+      return res.status(404).type('html').send(page('Delivery Not Found', '<h1>Delivery code not found</h1>'));
+    }
+    const order = await getOrder(delivery.order_id);
+    res.type('html').send(page('Delivery', `
+      <h1>Delivery Code</h1>
+      <div class="panel">
+        <p>Your delivery code:</p>
+        <p class="price"><code>${h(delivery.public_code)}</code></p>
+        <p>Status: <span class="status">${h(delivery.status)}</span></p>
+        <p>Order: <code>${h(order.id)}</code></p>
+        <p class="muted">The third-party raw connection code is encrypted in storage and is not displayed on this page.</p>
+      </div>
+    `));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/admin', async (req, res, next) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const [orders, purchases, deliveryCodes] = await Promise.all([
+      listOrders(),
+      listPurchases(),
+      listDeliveryCodes()
+    ]);
+    res.type('html').send(page('Admin', `
     <h1>Admin</h1>
     <p class="lead">View orders, purchase tasks, fulfillment status, retry failed purchases, and mark tasks for manual intervention.</p>
     <h2>Orders</h2>
     <table>
       <thead><tr><th>ID</th><th>Contact</th><th>Plan</th><th>Payment</th><th>Fulfillment</th><th>Delivery</th></tr></thead>
-      <tbody>${listOrders().map((order) => `<tr>
+      <tbody>${orders.map((order) => `<tr>
         <td><a href="/orders/${h(order.id)}">${h(order.id)}</a></td>
         <td>${h(order.user_contact)}</td>
         <td>${h(order.plan_id)}</td>
@@ -415,7 +453,7 @@ router.get('/admin', (req, res) => {
     <h2>Delivery Codes</h2>
     <table>
       <thead><tr><th>Public Code</th><th>Order</th><th>Status</th><th>Expires</th><th>Encrypted Payload</th></tr></thead>
-      <tbody>${listDeliveryCodes().map((delivery) => `<tr>
+      <tbody>${deliveryCodes.map((delivery) => `<tr>
         <td>${h(delivery.public_code)}</td>
         <td>${h(delivery.order_id)}</td>
         <td>${h(delivery.status)}</td>
@@ -424,18 +462,29 @@ router.get('/admin', (req, res) => {
       </tr>`).join('')}</tbody>
     </table>
   `));
+  } catch (error) {
+    next(error);
+  }
 });
 
-router.post('/admin/purchases/:purchaseId/retry', (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  retryPurchase(req.params.purchaseId);
-  res.redirect(303, '/admin');
+router.post('/admin/purchases/:purchaseId/retry', async (req, res, next) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    await retryPurchase(req.params.purchaseId);
+    res.redirect(303, '/admin');
+  } catch (error) {
+    next(error);
+  }
 });
 
-router.post('/admin/purchases/:purchaseId/manual', (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  markPurchaseManual(req.params.purchaseId);
-  res.redirect(303, '/admin');
+router.post('/admin/purchases/:purchaseId/manual', async (req, res, next) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    await markPurchaseManual(req.params.purchaseId);
+    res.redirect(303, '/admin');
+  } catch (error) {
+    next(error);
+  }
 });
 
 export default router;

@@ -23,4 +23,17 @@ app.use((req, res) => {
   res.status(404).json({ error: { message: 'Not found', code: 'not_found' } });
 });
 
+app.use((error, req, res, next) => {
+  if (res.headersSent) {
+    return next(error);
+  }
+
+  res.status(error.statusCode || 500).json({
+    error: {
+      message: error.message || 'Internal server error',
+      code: error.code || 'internal_error'
+    }
+  });
+});
+
 export default app;
