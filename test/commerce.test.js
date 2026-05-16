@@ -13,6 +13,8 @@ const { resetStoreForTests, listOrders, listPurchases, listDeliveryCodes } = awa
 let server;
 let baseUrl;
 
+const forbiddenFrontText = /OPENCLAW_A|OPENCLAW_B|OPENCLAW_C|TP_PLAN_3|TP_PLAN_8|TP_PLAN_ENTERPRISE_2|mapped purchase plan|our_plan_code|third_party_plan_code|our_plan_id|采购映射|自动采购任务|原始连接信息加密保存|encrypted_payload|后台处理机制/;
+
 before(async () => {
   server = app.listen(0);
   await once(server, 'listening');
@@ -42,27 +44,57 @@ test('health and status expose delivery platform state', async () => {
   assert.equal(body.totals.plans, 3);
 });
 
-test('plan and checkout pages are reachable', async () => {
+test('homepage is a Chinese storefront search portal', async () => {
+  const response = await fetch(`${baseUrl}/`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /tokyo 多模API商店/);
+  assert.match(html, /搜索套餐、使用问题或提交需求/);
+  assert.match(html, /购买入门套餐/);
+  assert.match(html, /购买进阶套餐/);
+  assert.match(html, /购买商务套餐/);
+  assert.match(html, /异常情况反馈/);
+  assert.match(html, /人工协助/);
+  assert.match(html, /常见问题/);
+  assert.match(html, /安全可靠/);
+  assert.doesNotMatch(html, forbiddenFrontText);
+});
+
+test('feedback help and faq pages are available', async () => {
+  const feedback = await fetch(`${baseUrl}/feedback`);
+  assert.equal(feedback.status, 200);
+  assert.match(await feedback.text(), /异常反馈/);
+
+  const help = await fetch(`${baseUrl}/help`);
+  assert.equal(help.status, 200);
+  assert.match(await help.text(), /帮助中心/);
+
+  const faq = await fetch(`${baseUrl}/faq`);
+  assert.equal(faq.status, 200);
+  assert.match(await faq.text(), /常见问题/);
+});
+
+test('plan and checkout pages hide internal mapping fields', async () => {
   const plans = await fetch(`${baseUrl}/plans`);
   assert.equal(plans.status, 200);
   const plansHtml = await plans.text();
   assert.match(plansHtml, /选择适合你的 AI 套餐/);
-  assert.doesNotMatch(plansHtml, /OPENCLAW_A|OPENCLAW_B|OPENCLAW_C|TP_PLAN_3|TP_PLAN_8|TP_PLAN_ENTERPRISE_2|Mapped purchase plan|third_party_plan_code|our_plan_id/);
+  assert.doesNotMatch(plansHtml, forbiddenFrontText);
+
+  const detail = await fetch(`${baseUrl}/plans/starter`);
+  assert.equal(detail.status, 200);
+  const detailHtml = await detail.text();
+  assert.match(detailHtml, /入门套餐/);
+  assert.doesNotMatch(detailHtml, forbiddenFrontText);
 
   const checkout = await fetch(`${baseUrl}/checkout/starter`);
   assert.equal(checkout.status, 200);
   const checkoutHtml = await checkout.text();
   assert.match(checkoutHtml, /提交订单/);
-  assert.doesNotMatch(checkoutHtml, /OPENCLAW_A|TP_PLAN_3|third_party_plan_code|our_plan_id/);
-
-  const detail = await fetch(`${baseUrl}/plans/starter`);
-  assert.equal(detail.status, 200);
-  const detailHtml = await detail.text();
-  assert.match(detailHtml, /入门体验套餐/);
-  assert.doesNotMatch(detailHtml, /OPENCLAW_A|TP_PLAN_3|third_party_plan_code|our_plan_id/);
+  assert.doesNotMatch(checkoutHtml, forbiddenFrontText);
 });
 
-test('order payment creates mapped purchase and delivery code without raw exposure', async () => {
+test('order payment creates delivery code without exposing raw or internal details', async () => {
   const createResponse = await fetch(`${baseUrl}/orders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -106,15 +138,17 @@ test('order payment creates mapped purchase and delivery code without raw exposu
   assert.match(orderHtml, new RegExp(orders[0].delivery_code));
   assert.match(orderHtml, /订单状态/);
   assert.doesNotMatch(orderHtml, /mock-connection/);
-  assert.doesNotMatch(orderHtml, /OPENCLAW_A|TP_PLAN_3|third_party_plan_code|our_plan_id/);
+  assert.doesNotMatch(orderHtml, forbiddenFrontText);
 
   const deliveryPage = await fetch(`${baseUrl}/delivery/${orders[0].delivery_code}`);
   const deliveryHtml = await deliveryPage.text();
-  assert.match(deliveryHtml, /原始连接信息已加密保存/);
+  assert.match(deliveryHtml, /请妥善保存此交付码/);
+  assert.match(deliveryHtml, /连接资料由系统安全保管/);
   assert.doesNotMatch(deliveryHtml, /mock-connection/);
+  assert.doesNotMatch(deliveryHtml, forbiddenFrontText);
 });
 
-test('admin page requires token and shows purchase status', async () => {
+test('admin page keeps internal mapping and purchase status', async () => {
   const locked = await fetch(`${baseUrl}/admin`);
   assert.equal(locked.status, 401);
 
@@ -135,6 +169,7 @@ test('admin page requires token and shows purchase status', async () => {
   const html = await admin.text();
   assert.match(html, /采购任务/);
   assert.match(html, /our_plan_code/);
+  assert.match(html, /third_party_plan_code/);
   assert.match(html, /OPENCLAW_B/);
   assert.match(html, /TP_PLAN_8/);
   assert.match(html, /success/);
