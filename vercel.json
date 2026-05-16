@@ -1,19 +1,13 @@
 {
   "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "src/server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/server.js"
+      "source": "/(.*)",
+      "destination": "/api"
     }
   ],
   "functions": {
-    "src/server.js": {
+    "api/index.js": {
       "maxDuration": 30,
       "memory": 1024
     }
