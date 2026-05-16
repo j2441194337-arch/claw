@@ -1,13 +1,19 @@
 {
   "service": {
-    "name": "openclaw",
-    "stage": "production-ready",
-    "description": "Third-party OpenAI-compatible API proxy"
+    "name": "openclaw-delivery",
+    "stage": "stage-1-mvp",
+    "description": "Third-party API package purchase and delivery platform"
   },
   "endpoints": [
     "GET /api/health",
     "GET /api/status",
-    "GET /v1/models",
-    "POST /v1/chat/completions"
+    "GET /plans",
+    "GET /plans/:planId",
+    "GET /checkout/:planId",
+    "POST /orders",
+    "POST /orders/:orderId/pay",
+    "GET /orders/:orderId",
+    "GET /delivery/:publicCode",
+    "GET /admin"
   ]
 }

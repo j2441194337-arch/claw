@@ -1,7 +1,7 @@
 {
-  "name": "ai-api-proxy",
+  "name": "openclaw-delivery",
   "version": "1.0.0",
-  "description": "Third-party OpenAI-compatible API proxy for Vercel",
+  "description": "Third-party API package purchase and encrypted delivery platform",
   "main": "src/server.js",
   "type": "module",
   "scripts": {
@@ -10,11 +10,11 @@
     "test": "node --test"
   },
   "keywords": [
-    "openai-compatible",
-    "ai-proxy",
+    "api-package-delivery",
+    "fulfillment",
+    "orders",
     "vercel",
-    "express",
-    "api-proxy"
+    "express"
   ],
   "author": "OpenClaw",
   "license": "MIT",

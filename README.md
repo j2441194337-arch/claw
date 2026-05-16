@@ -1,17 +1,84 @@
-# OpenClaw API Proxy
+# OpenClaw Delivery
 
-OpenClaw is a third-party OpenAI-compatible API proxy and distribution service.
+OpenClaw Delivery is a third-party API package purchase and encrypted delivery platform.
 
-Users call this service with a platform API key from `API_KEYS`. OpenClaw validates that key, forwards the request to the upstream OpenAI-compatible provider using `OPENAI_BASE_URL` and `OPENAI_API_KEY`, then returns the upstream response to the user.
+The current focus is no longer an OpenAI-compatible request proxy. Users should not call our `/v1/chat/completions` endpoint and expect request forwarding. The product flow is:
 
-This project is not wired directly to the official OpenAI API by default. It is designed for third-party platforms that expose OpenAI-compatible `/v1` endpoints.
+1. User visits the site.
+2. User chooses one of our storefront plans.
+3. User creates an order and pays on our platform.
+4. Payment success triggers a purchase task.
+5. The purchase task uses the plan mapping table: `our_plan_id -> third_party_plan_code`.
+6. The third-party platform returns a connection code, authorization code, or key.
+7. The raw third-party code is encrypted and stored server-side.
+8. OpenClaw generates a public delivery code.
+9. The user sees only the public delivery code and uses it to complete connection.
 
-## API Endpoints
+Stage 1 simulates payment and third-party purchasing. Stage 2 can replace the mock purchase worker with a real third-party API or browser automation workflow.
 
-- `GET /api/health`
-- `GET /api/status`
-- `GET /v1/models`
-- `POST /v1/chat/completions`
+## Data Structures
+
+### `plans`
+
+- `id`
+- `name`
+- `price`
+- `description`
+- `our_plan_code`
+- `third_party_plan_code`
+- `enabled`
+
+### `orders`
+
+- `id`
+- `user_contact`
+- `plan_id`
+- `pay_status`
+- `fulfillment_status`
+- `third_party_order_id`
+- `delivery_code`
+- `created_at`
+- `updated_at`
+
+### `third_party_purchases`
+
+- `id`
+- `order_id`
+- `third_party_plan_code`
+- `purchase_status`
+- `raw_connection_code_encrypted`
+- `error_message`
+- `created_at`
+
+The implementation also tracks `updated_at`, `retry_count`, and `manual_intervention_required`.
+
+### `delivery_codes`
+
+- `id`
+- `order_id`
+- `public_code`
+- `encrypted_payload`
+- `status`
+- `expires_at`
+
+The current MVP stores these records in process memory so it is deployable without extra services. Production should move them to an encrypted database before real sales.
+
+## Website Routes
+
+- `GET /` homepage
+- `GET /plans` package list
+- `GET /plans/:planId` package detail
+- `GET /checkout/:planId` order page
+- `POST /orders` create order
+- `POST /orders/:orderId/pay` simulate payment success
+- `GET /orders` order lookup
+- `GET /orders/:orderId` order status and delivery code
+- `GET /delivery/:publicCode` user delivery page
+- `GET /admin` admin overview for orders, purchases, and delivery codes
+- `POST /admin/purchases/:purchaseId/retry` retry purchase task
+- `POST /admin/purchases/:purchaseId/manual` mark purchase for manual handling
+- `GET /api/health` service health
+- `GET /api/status` system status
 
 ## Environment Variables
 
@@ -20,17 +87,18 @@ Set these in Vercel Environment Variables:
 ```bash
 NODE_ENV=production
 PORT=3000
-API_KEYS=platform-user-key-1,platform-user-key-2
-OPENAI_API_KEY=third-party-upstream-key
-OPENAI_BASE_URL=https://third-party.example.com/v1
+DELIVERY_ENCRYPTION_KEY=replace-with-long-random-secret
+ADMIN_TOKEN=replace-with-admin-token
+THIRD_PARTY_ACCOUNT=
+THIRD_PARTY_PASSWORD=
 ```
 
 Notes:
 
-- `API_KEYS` is for users of your platform. Multiple keys are comma-separated.
-- `OPENAI_API_KEY` is the real upstream provider key. Keep it only in server-side environment variables.
-- `OPENAI_BASE_URL` should point to the upstream OpenAI-compatible base URL, usually ending at `/v1`.
-- Do not set `OPENAI_BASE_URL` to `/v1/chat/completions`; the app appends `/chat/completions` itself.
+- `DELIVERY_ENCRYPTION_KEY` protects encrypted third-party connection payloads.
+- `ADMIN_TOKEN` is required for the admin page in production. Use `?token=...` or `X-Admin-Token`.
+- `THIRD_PARTY_ACCOUNT` and `THIRD_PARTY_PASSWORD` are placeholders for Stage 2 integrations and must stay in environment variables only.
+- Do not write real credentials, raw connection codes, API keys, cookies, or tokens into GitHub.
 
 ## Local Development
 
@@ -43,39 +111,23 @@ npm run dev
 Then visit:
 
 - `http://localhost:3000/`
-- `http://localhost:3000/api/health`
-- `http://localhost:3000/api/status`
+- `http://localhost:3000/plans`
+- `http://localhost:3000/admin`
 
-## User Chat Call
+In non-production mode, the admin page is open when `ADMIN_TOKEN` is not set. In production, set `ADMIN_TOKEN`.
 
-Users call `POST /v1/chat/completions` with one of the platform keys from `API_KEYS`.
+## Stage 1 Fulfillment Flow
 
-```bash
-curl http://localhost:3000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer platform-user-key-1" \
-  -d '{
-    "model": "third-party-original-model-name",
-    "messages": [
-      {
-        "role": "user",
-        "content": "hello"
-      }
-    ]
-  }'
-```
+1. Choose a plan from `/plans`.
+2. Create an order from `/checkout/:planId`.
+3. Click "Simulate payment success" on the order page.
+4. The system creates a third-party purchase task using the mapped `third_party_plan_code`.
+5. The mock purchase worker generates a fake raw connection code.
+6. The raw code is encrypted with AES-256-GCM.
+7. The system generates an `OC-...` public delivery code.
+8. The user sees the public delivery code on the order and delivery pages.
 
-The `model` value is forwarded exactly as provided. Use the original model name supported by the third-party provider.
-
-## Models
-
-`GET /v1/models` forwards to:
-
-```text
-OPENAI_BASE_URL + /models
-```
-
-The upstream response is returned to the user. This project does not use `MODEL_ALIASES`, and it does not map custom names such as `claw-fast` or `claw-pro`.
+The raw third-party connection code is never shown to the frontend.
 
 ## Vercel Deployment
 
@@ -87,23 +139,16 @@ Recommended Vercel settings:
 - Build Command: leave empty
 - Output Directory: leave empty
 
-The project uses `vercel.json` to route all requests to `src/server.js` through `@vercel/node`. `src/server.js` exports the Express app for Vercel and only starts a listener during local execution.
-
-After importing the GitHub repository into Vercel, fill these environment variables before deploying:
-
-- `NODE_ENV=production`
-- `PORT=3000`
-- `API_KEYS`
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL`
+The project uses `vercel.json` to route requests to `src/server.js` through `@vercel/node`.
 
 ## Security
 
-- Do not commit `.env`, `.vercel/`, `node_modules/`, logs, real keys, cookies, or tokens.
-- Do not put the real `OPENAI_API_KEY` in README, source code, frontend pages, logs, or GitHub commits.
-- Do not give the upstream provider key to users.
-- Users should only receive platform API keys that appear in `API_KEYS`.
-- Error responses must not include `OPENAI_API_KEY`.
+- Do not commit `.env`, `.vercel/`, `node_modules/`, logs, real credentials, or raw connection codes.
+- Do not expose the third-party raw connection code to the frontend.
+- Store sensitive values in environment variables or an encrypted database.
+- Users should only see the generated delivery code.
+- Purchase failures must be retryable and can be marked for manual intervention.
+- Orders and delivery statuses must be recorded.
 
 ## Tests
 
@@ -111,4 +156,4 @@ After importing the GitHub repository into Vercel, fill these environment variab
 npm test
 ```
 
-The test suite covers health/status endpoints, platform-key authentication, `/v1/models` upstream forwarding, and `/v1/chat/completions` model pass-through behavior.
+The test suite covers plan pages, order creation, simulated payment, mapped purchase creation, encrypted delivery payloads, delivery lookup, and admin status.

@@ -3,7 +3,7 @@ import { env } from './utils/env.js';
 
 if (!process.env.VERCEL) {
   app.listen(env.port, () => {
-    console.log(`ai-api-proxy listening on port ${env.port}`);
+    console.log(`openclaw-delivery listening on port ${env.port}`);
   });
 }
 
